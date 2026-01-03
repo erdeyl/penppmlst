@@ -4,6 +4,21 @@
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
 *! Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 
+* Check required dependencies
+cap which ftools
+if _rc {
+    di as error "penppmlst requires ftools"
+    di as error "Install with: ssc install ftools"
+    exit 198
+}
+
+cap which reghdfe
+if _rc {
+    di as error "penppmlst requires reghdfe"
+    di as error "Install with: ssc install reghdfe"
+    exit 198
+}
+
 * Initialize Mata code on first use
 cap mata: mata which PenPPML()
 if _rc {
