@@ -3,7 +3,7 @@
 *! Implements penalty weight computation following Belloni, Chernozhukov, Hansen, Kozbur (2016)
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
-*! Authors: Based on R penppmlst by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
+*! Authors: Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 
 version 17.0
 mata:
