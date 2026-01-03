@@ -15,7 +15,7 @@ d cross-validation, plugin methods, or information criteria.
 d
 d Requires: Stata 17+, reghdfe, ftools
 d
-d Support: https://github.com/lerdey/penppmlst/issues
+d Support: https://github.com/erdeyl/penppmlst/issues
 d
 F penppmlst.ado
 F penppmlst_p.ado

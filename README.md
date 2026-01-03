@@ -22,7 +22,7 @@ This is a Stata implementation based on the R package [penppmlst](https://github
 ### From GitHub
 
 ```stata
-net install penppmlst, from("https://raw.githubusercontent.com/lerdey/penppmlst/main/src") replace
+net install penppmlst, from("https://raw.githubusercontent.com/erdeyl/penppmlst/main/src") replace
 ```
 
 ### Dependencies
