@@ -13,7 +13,14 @@ d with high-dimensional fixed effects (HDFE). Supports lasso, ridge, and
 d elastic net penalties with automatic penalty parameter selection via
 d cross-validation, plugin methods, or information criteria.
 d
-d Requires: Stata 17+, reghdfe, ftools
+d Key features:
+d - Plugin lasso with Belloni et al. (2016) penalty formula
+d - Cross-validation for lambda selection
+d - BIC/AIC/EBIC information criteria
+d - R-compatible mode for exact replication of R penppml results
+d - Choice of HDFE backends: pure Mata or ppmlhdfe
+d
+d Requires: Stata 17+, reghdfe, ftools, ppmlhdfe
 d
 d Support: https://github.com/erdeyl/penppmlst/issues
 d

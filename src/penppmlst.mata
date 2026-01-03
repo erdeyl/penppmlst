@@ -1,4 +1,4 @@
-*! version 0.3.0  03jan2026
+*! version 0.5.0  03jan2026
 *! Core PenPPML class: Penalized PPML with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
