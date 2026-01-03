@@ -1,4 +1,4 @@
-*! version 0.2.0  03jan2026
+*! version 0.3.0  03jan2026
 *! Core PenPPML class: Penalized PPML with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
@@ -64,7 +64,7 @@ class PenPPML {
     real matrix         X_std           // Standardized X
 
     // ===== HDFE SETTINGS =====
-    string scalar       hdfe_method     // "mata", "ppmlhdfe", or "reghdfe"
+    string scalar       hdfe_method     // "mata" or "ppmlhdfe"
     real scalar         r_compatible    // Use R-compatible settings
 
     // ===== METHODS =====
@@ -86,7 +86,12 @@ class PenPPML {
     void                set_hdfe_method()
     real colvector      partial_out_fe_mata()
     real colvector      partial_out_fe_ppmlhdfe()
-    real colvector      partial_out_fe_reghdfe()
+
+    // ===== PPMLHDFE INTEGRATION =====
+    pointer(class FixedEffects scalar) scalar HDFE_ptr  // Pointer to reghdfe's FixedEffects
+    real scalar         hdfe_initialized                 // Has HDFE been initialized?
+    void                init_hdfe_object()               // Initialize FixedEffects object
+    void                update_hdfe_weights()            // Update HDFE weights
 }
 
 // ============================================================================
@@ -114,6 +119,8 @@ void PenPPML::new()
 
     hdfe_method = "mata"
     r_compatible = 0
+    hdfe_initialized = 0
+    HDFE_ptr = NULL
 }
 
 // ============================================================================
@@ -260,8 +267,6 @@ real colvector PenPPML::partial_out_fe(real colvector v, real colvector wts)
     // Dispatch based on hdfe_method
     if (hdfe_method == "ppmlhdfe") {
         return(partial_out_fe_ppmlhdfe(v, wts))
-    } else if (hdfe_method == "reghdfe") {
-        return(partial_out_fe_reghdfe(v, wts))
     } else {
         // Default: pure Mata implementation (R-compatible)
         return(partial_out_fe_mata(v, wts))
@@ -674,46 +679,92 @@ void PenPPML::set_hdfe_method(string scalar method, real scalar r_compat)
 }
 
 // ============================================================================
-// PARTIAL OUT FE VIA PPMLHDFE
-// Uses ppmlhdfe's internal routines for HDFE (fast, Stata-native)
+// PARTIAL OUT FE VIA PPMLHDFE/REGHDFE
+// Uses reghdfe's FixedEffects Mata class (used by ppmlhdfe)
+// This provides optimized HDFE computation via alternating projections
+// with acceleration methods (Cimmino, symmetric Kaczmarz, etc.)
 // ============================================================================
 
 real colvector PenPPML::partial_out_fe_ppmlhdfe(real colvector v, real colvector wts)
 {
+    real matrix data
     real colvector v_demean
-    real scalar rc
 
-    // For now, fall back to Mata implementation
-    // Full ppmlhdfe integration would use:
-    // 1. Call ppmlhdfe's FixedEffects class via Stata interface
-    // 2. Use st_store/st_view for data exchange
+    if (n_fe == 0) {
+        return(v)
+    }
 
-    // Placeholder: use Mata method (avoids infinite recursion)
-    v_demean = partial_out_fe_mata(v, wts)
+    // Initialize HDFE object if not done yet
+    if (!hdfe_initialized) {
+        init_hdfe_object()
+    }
+
+    // Update weights in the HDFE object
+    update_hdfe_weights(wts)
+
+    // Create data matrix for partial_out (column vector)
+    data = v
+
+    // Call reghdfe's _partial_out method
+    // Parameters: data, standardize=0, drop_singletons=0, demean=0, flush_aux=1
+    (*HDFE_ptr)._partial_out(data, 0, 0, 0, 1)
+
+    v_demean = data
 
     return(v_demean)
 }
 
 // ============================================================================
-// PARTIAL OUT FE VIA REGHDFE
-// Uses reghdfe's FixedEffects Mata class (fast, optimized)
+// INITIALIZE HDFE OBJECT
+// Creates reghdfe's FixedEffects object for use in partial-out operations
 // ============================================================================
 
-real colvector PenPPML::partial_out_fe_reghdfe(real colvector v, real colvector wts)
+void PenPPML::init_hdfe_object()
 {
-    real colvector v_demean
-    real scalar rc
+    string scalar absorb_spec
+    string scalar touse_var
+    real scalar k
+    
+    // Build absorb specification from fe_vars
+    absorb_spec = ""
+    for (k = 1; k <= n_fe; k++) {
+        if (k > 1) absorb_spec = absorb_spec + " "
+        absorb_spec = absorb_spec + fe_vars[k]
+    }
+    
+    // Get touse variable name (all obs in current sample)
+    touse_var = st_tempname()
+    (void) st_addvar("byte", touse_var)
+    st_store(., touse_var, J(n, 1, 1))
+    
+    // Create FixedEffects object via fixed_effects() function
+    // Parameters: absorb, touse, weight_type, depvar, ., verbose
+    HDFE_ptr = &fixed_effects(absorb_spec, touse_var, "aweight", "", ., 0)
+    
+    // Load initial weights (will be updated during IRLS)
+    (*HDFE_ptr).load_weights("aweight", "", w, 0)
+    
+    hdfe_initialized = 1
+}
 
-    // For now, fall back to Mata implementation
-    // Full reghdfe integration would use:
-    // 1. Create class FixedEffects scalar HDFE
-    // 2. HDFE = FixedEffects()
-    // 3. HDFE.partial_out(v, wts)
+// ============================================================================
+// UPDATE HDFE WEIGHTS
+// Updates the weights in the FixedEffects object for weighted demeaning
+// ============================================================================
 
-    // Placeholder: use Mata method (avoids infinite recursion)
-    v_demean = partial_out_fe_mata(v, wts)
-
-    return(v_demean)
+void PenPPML::update_hdfe_weights(real colvector wts)
+{
+    if (!hdfe_initialized) {
+        errprintf("HDFE object not initialized
+")
+        exit(error(198))
+    }
+    
+    // Update sorted weights in the HDFE object
+    (*HDFE_ptr).update_sorted_weights(wts)
+    
+    // Update cached objects that depend on weights
+    (*HDFE_ptr).update_cvar_objects()
 }
 
 // ============================================================================

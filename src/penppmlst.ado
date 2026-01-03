@@ -1,4 +1,4 @@
-*! version 0.2.0  03jan2026
+*! version 0.3.0  03jan2026
 *! penppmlst: Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
@@ -31,7 +31,7 @@ program define penppmlst, eclass sortpreserve
         Level(cilevel)                          /// Confidence level
         VERBose                                 /// Show iteration log
         NOLOg                                   /// Suppress iteration log
-        HDFE(string)                            /// HDFE method: mata, ppmlhdfe, reghdfe
+        HDFE(string)                            /// HDFE method: mata or ppmlhdfe
         R_compatible                            /// Use R penppml-compatible settings
         ]
 
@@ -105,8 +105,8 @@ program define penppmlst, eclass sortpreserve
     }
 
     // Validate HDFE method
-    if !inlist("`hdfe'", "mata", "ppmlhdfe", "reghdfe") {
-        di as error "hdfe() must be mata, ppmlhdfe, or reghdfe"
+    if !inlist("`hdfe'", "mata", "ppmlhdfe") {
+        di as error "hdfe() must be mata or ppmlhdfe"
         exit 198
     }
 
@@ -120,14 +120,6 @@ program define penppmlst, eclass sortpreserve
         }
     }
 
-    if "`hdfe'" == "reghdfe" {
-        cap which reghdfe
-        if _rc {
-            di as error "reghdfe is required for hdfe(reghdfe)"
-            di as error "Install with: ssc install reghdfe"
-            exit 198
-        }
-    }
 
     // R-compatible settings
     local do_r_compat = 0

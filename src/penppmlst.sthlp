@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.2.0  03jan2026}{...}
+{* *! version 0.3.0  03jan2026}{...}
 {viewerjumpto "Syntax" "penppmlst##syntax"}{...}
 {viewerjumpto "Description" "penppmlst##description"}{...}
 {viewerjumpto "Options" "penppmlst##options"}{...}
@@ -51,7 +51,7 @@
 {synopt:{opt max:iter(#)}}maximum IRLS iterations; default is 1000{p_end}
 
 {syntab:HDFE Method}
-{synopt:{opt hdfe(string)}}HDFE backend: {bf:mata}, {bf:ppmlhdfe}, or {bf:reghdfe}; default is {bf:mata}{p_end}
+{synopt:{opt hdfe(string)}}HDFE backend: {bf:mata} or {bf:ppmlhdfe}; default is {bf:mata}{p_end}
 {synopt:{opt r_compatible}}use R penppml-compatible settings for reproducibility{p_end}
 
 {syntab:Reporting}
@@ -147,14 +147,10 @@ This is the default and is fully compatible with the R penppml package, producin
 numerically comparable results. Recommended when reproducibility with R is required.
 
 {p 12 16 2}
-{bf:ppmlhdfe} - Uses the ppmlhdfe package's internal HDFE routines.
-Faster for very large datasets. Requires {cmd:ssc install ppmlhdfe}.
-Results may differ slightly from R due to algorithmic differences.
-
-{p 12 16 2}
-{bf:reghdfe} - Uses reghdfe's optimized FixedEffects Mata class.
-Fastest option for large datasets with many fixed effects. 
-Requires {cmd:ssc install reghdfe}.
+{bf:ppmlhdfe} - Uses reghdfe's optimized FixedEffects Mata class (the same
+infrastructure used by ppmlhdfe). Significantly faster for large datasets with
+many fixed effects due to acceleration methods (Cimmino, symmetric Kaczmarz).
+Requires {cmd:ssc install ftools} and {cmd:ssc install reghdfe}.
 Results may differ slightly from R due to algorithmic differences.
 
 {phang}
@@ -179,8 +175,8 @@ compare estimates across platforms.
 {pstd}Ridge regression{p_end}
 {phang2}{cmd:. penppmlst trade gravity_vars, absorb(i.exp#i.imp) penalty(ridge) lambda(1)}{p_end}
 
-{pstd}Using reghdfe backend for faster HDFE computation{p_end}
-{phang2}{cmd:. penppmlst trade tariff distance, absorb(i.exp i.imp i.year) hdfe(reghdfe) selection(cv)}{p_end}
+{pstd}Using ppmlhdfe backend for faster HDFE computation{p_end}
+{phang2}{cmd:. penppmlst trade tariff distance, absorb(i.exp i.imp i.year) hdfe(ppmlhdfe) selection(cv)}{p_end}
 
 {pstd}R-compatible estimation for cross-platform reproducibility{p_end}
 {phang2}{cmd:. penppmlst trade provision1-provision100, absorb(i.pair i.year) selection(plugin) r_compatible}{p_end}
@@ -206,7 +202,7 @@ compare estimates across platforms.
 {synopt:{cmd:e(depvar)}}dependent variable name{p_end}
 {synopt:{cmd:e(selected)}}names of selected variables{p_end}
 {synopt:{cmd:e(penalty)}}penalty type used{p_end}
-{synopt:{cmd:e(hdfe)}}HDFE method used (mata, ppmlhdfe, or reghdfe){p_end}
+{synopt:{cmd:e(hdfe)}}HDFE method used (mata or ppmlhdfe){p_end}
 {synopt:{cmd:e(r_compatible)}}1 if R-compatible mode, 0 otherwise{p_end}
 
 {p2col 5 20 24 2: Matrices}{p_end}
