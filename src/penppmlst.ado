@@ -19,6 +19,13 @@ if _rc {
     exit 198
 }
 
+cap which ppmlhdfe
+if _rc {
+    di as error "penppmlst requires ppmlhdfe"
+    di as error "Install with: ssc install ppmlhdfe"
+    exit 198
+}
+
 * Initialize Mata code on first use
 cap mata: mata which PenPPML()
 if _rc {
