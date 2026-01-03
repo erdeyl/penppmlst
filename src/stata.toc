@@ -1,0 +1,14 @@
+v 3
+d penppmlst - Penalized PPML with High-Dimensional Fixed Effects
+d
+d Author: Erdey, László
+d Faculty of Economics and Business, University of Debrecen, Hungary
+d
+d This package provides tools for estimating penalized Poisson Pseudo
+d Maximum Likelihood regressions with lasso, ridge, or elastic net
+d penalties, for models with high-dimensional fixed effects.
+d
+d Based on the R package penppmlst by Breinlich, Corradi, Rocha, Ruta,
+d Santos Silva, and Zylkin (2021).
+d
+p penppmlst Penalized PPML with High-Dimensional Fixed Effects

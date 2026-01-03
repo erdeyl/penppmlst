@@ -1,0 +1,26 @@
+v 3
+d penppmlst: Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects
+d
+d Author: Erdey, László
+d Affiliation: Faculty of Economics and Business, University of Debrecen, Hungary
+d
+d Based on R penppmlst by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
+d
+d Distribution-Date: 20260103
+d
+d penppmlst fits penalized Poisson Pseudo Maximum Likelihood (PPML) regressions
+d with high-dimensional fixed effects (HDFE). Supports lasso, ridge, and
+d elastic net penalties with automatic penalty parameter selection via
+d cross-validation, plugin methods, or information criteria.
+d
+d Requires: Stata 17+, reghdfe, ftools
+d
+d Support: https://github.com/lerdey/penppmlst/issues
+d
+F penppmlst.ado
+F penppmlst_p.ado
+F penppmlst.sthlp
+f penppmlst_utils.mata
+f penppmlst.mata
+f penppmlst_cv.mata
+f penppmlst_plugin.mata
