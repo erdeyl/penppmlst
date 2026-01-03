@@ -1,4 +1,4 @@
-*! version 0.1.0  03jan2026
+*! version 0.2.0  03jan2026
 *! penppmlst: Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
@@ -31,6 +31,8 @@ program define penppmlst, eclass sortpreserve
         Level(cilevel)                          /// Confidence level
         VERBose                                 /// Show iteration log
         NOLOg                                   /// Suppress iteration log
+        HDFE(string)                            /// HDFE method: mata, ppmlhdfe, reghdfe
+        R_compatible                            /// Use R penppml-compatible settings
         ]
 
     // =========================================================================
@@ -91,6 +93,50 @@ program define penppmlst, eclass sortpreserve
     if `alpha' < 0 | `alpha' > 1 {
         di as error "alpha() must be between 0 and 1"
         exit 198
+    }
+
+    // =========================================================================
+    // HDFE METHOD SELECTION
+    // =========================================================================
+
+    // Set default HDFE method
+    if "`hdfe'" == "" {
+        local hdfe "mata"
+    }
+
+    // Validate HDFE method
+    if !inlist("`hdfe'", "mata", "ppmlhdfe", "reghdfe") {
+        di as error "hdfe() must be mata, ppmlhdfe, or reghdfe"
+        exit 198
+    }
+
+    // Check if required packages are installed
+    if "`hdfe'" == "ppmlhdfe" {
+        cap which ppmlhdfe
+        if _rc {
+            di as error "ppmlhdfe is required for hdfe(ppmlhdfe)"
+            di as error "Install with: ssc install ppmlhdfe"
+            exit 198
+        }
+    }
+
+    if "`hdfe'" == "reghdfe" {
+        cap which reghdfe
+        if _rc {
+            di as error "reghdfe is required for hdfe(reghdfe)"
+            di as error "Install with: ssc install reghdfe"
+            exit 198
+        }
+    }
+
+    // R-compatible settings
+    local do_r_compat = 0
+    if "`r_compatible'" != "" {
+        local do_r_compat = 1
+        if "`hdfe'" != "mata" {
+            di as txt "Note: r_compatible implies hdfe(mata) for exact R replication"
+            local hdfe "mata"
+        }
     }
 
     // Handle standardize option
@@ -173,6 +219,13 @@ program define penppmlst, eclass sortpreserve
     di as txt "Number of observations: " as res "`nobs'"
     di as txt "Number of regressors: " as res "`nvars'"
     di as txt "Fixed effects: " as res "`absorb'"
+    di as txt "HDFE method: " as res "`hdfe'" _c
+    if "`r_compatible'" != "" {
+        di as txt " (R-compatible mode)"
+    }
+    else {
+        di ""
+    }
     di as txt "Penalty: " as res "`penalty'" _c
     if "`penalty'" == "elasticnet" {
         di as txt " (alpha = " as res "`alpha'" as txt ")"
@@ -198,7 +251,8 @@ program define penppmlst, eclass sortpreserve
                            "`wvar'", "`penalty'", `lambda', `alpha', ///
                            "`selection'", `nfolds', `nlambda', `lminratio', ///
                            "`cluster'", `do_post', `do_standardize', ///
-                           `tolerance', `maxiter', `do_verbose')
+                           `tolerance', `maxiter', `do_verbose', ///
+                           "`hdfe'", `do_r_compat')
 
     // =========================================================================
     // POST RESULTS
@@ -249,6 +303,10 @@ program define penppmlst, eclass sortpreserve
     ereturn local absorb "`absorb'"
     ereturn local penalty "`penalty'"
     ereturn local selection "`selection'"
+    ereturn local hdfe "`hdfe'"
+    if "`r_compatible'" != "" {
+        ereturn local r_compatible "yes"
+    }
     if "`cluster'" != "" {
         ereturn local clustvar "`cluster'"
     }
@@ -287,6 +345,7 @@ program define penppmlst, eclass sortpreserve
     }
     di as txt "Log pseudo-likelihood: " as res %12.4f `ll'
     di as txt "Deviance: " as res %12.4f `deviance'
+    di as txt "HDFE method: " as res "`hdfe'"
     di as txt "{hline 60}"
 
 end
@@ -316,7 +375,8 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
                       real scalar lminratio, string scalar cluster,
                       real scalar do_post, real scalar do_standardize,
                       real scalar tol, real scalar maxiter,
-                      real scalar verbose)
+                      real scalar verbose, string scalar hdfe_method,
+                      real scalar r_compatible)
 {
     class PenPPML scalar M
     real colvector y, w
@@ -364,7 +424,8 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
         }
         lambdas = generate_lambda_sequence(X, y, w, psi, alpha, nlambda, lminratio)
         best_lambda = cv_select_lambda(y, X, fe_ids, w, lambdas, alpha,
-                                       penalty, psi, nfolds, tol, maxiter)
+                                       penalty, psi, nfolds, tol, maxiter,
+                                       hdfe_method, r_compatible)
         lambda = best_lambda
     }
     else if (selection == "plugin") {
@@ -372,7 +433,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
         if (verbose) {
             printf("Computing plugin penalty weights...\n")
         }
-        psi = compute_plugin_weights(y, X, fe_ids, w, cluster)
+        psi = compute_plugin_weights(y, X, fe_ids, w, cluster, hdfe_method)
         lambda = compute_plugin_lambda(n, p, psi)
     }
     else if (selection == "bic" | selection == "aic" | selection == "ebic") {
@@ -382,7 +443,8 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
         }
         lambdas = generate_lambda_sequence(X, y, w, psi, alpha, nlambda, lminratio)
         best_lambda = ic_select_lambda(y, X, fe_ids, w, lambdas, alpha,
-                                       penalty, psi, selection, tol, maxiter)
+                                       penalty, psi, selection, tol, maxiter,
+                                       hdfe_method, r_compatible)
         lambda = best_lambda
     }
 
@@ -395,6 +457,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
     }
     M.set_penalty(penalty, lambda, alpha, psi)
     M.set_options(tol, maxiter, do_standardize, verbose)
+    M.set_hdfe_method(hdfe_method, r_compatible)
 
     // Solve
     M.solve()
@@ -448,7 +511,8 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
                              real colvector lambdas, real scalar alpha,
                              string scalar penalty, real colvector psi,
                              real scalar nfolds, real scalar tol,
-                             real scalar maxiter)
+                             real scalar maxiter, string scalar hdfe_method,
+                             real scalar r_compatible)
 {
     real scalar n, p, nlam, fold, lam_idx
     real colvector fold_id
@@ -499,6 +563,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
             }
             M.set_penalty(penalty, lambdas[lam_idx], alpha, psi)
             M.set_options(tol, min((maxiter, 100)), 1, 0)
+            M.set_hdfe_method(hdfe_method, r_compatible)
             M.solve()
 
             // Predict on test data
@@ -536,7 +601,8 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
                              real colvector lambdas, real scalar alpha,
                              string scalar penalty, real colvector psi,
                              string scalar criterion, real scalar tol,
-                             real scalar maxiter)
+                             real scalar maxiter, string scalar hdfe_method,
+                             real scalar r_compatible)
 {
     real scalar n, p, nlam, lam_idx
     real colvector ic_values
@@ -559,6 +625,7 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
         }
         M.set_penalty(penalty, lambdas[lam_idx], alpha, psi)
         M.set_options(tol, min((maxiter, 100)), 1, 0)
+        M.set_hdfe_method(hdfe_method, r_compatible)
         M.solve()
 
         ll = M.ll
@@ -597,7 +664,8 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
 
 real colvector compute_plugin_weights(real colvector y, real matrix X,
                                       real matrix fe_ids, real colvector w,
-                                      string scalar cluster)
+                                      string scalar cluster,
+                                      string scalar hdfe_method)
 {
     real scalar n, p, j
     real colvector psi
@@ -617,6 +685,7 @@ real colvector compute_plugin_weights(real colvector y, real matrix X,
     }
     M.set_penalty("ridge", 0, 0, J(p, 1, 1))  // No penalty
     M.set_options(1e-8, 100, 1, 0)
+    M.set_hdfe_method(hdfe_method, 0)
     M.solve()
 
     mu = M.mu
