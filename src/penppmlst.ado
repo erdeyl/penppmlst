@@ -1,4 +1,4 @@
-*! version 0.3.0  03jan2026
+*! version 0.4.0  03jan2026
 *! penppmlst: Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
@@ -26,6 +26,10 @@ if _rc {
     exit 198
 }
 
+* Check for Stata 19's built-in hdfe command (optional, for future performance)
+cap which hdfe
+global PENPPMLST_STATA19_HDFE = (_rc == 0)
+
 * Initialize Mata code on first use
 cap mata: mata which PenPPML()
 if _rc {
@@ -35,6 +39,7 @@ if _rc {
 
     * Run the Mata source files
     cap noi run "`adopath'penppmlst_utils.mata"
+    cap noi run "`adopath'penppmlst_rcompat.mata"
     cap noi run "`adopath'penppmlst.mata"
     cap noi run "`adopath'penppmlst_cv.mata"
     cap noi run "`adopath'penppmlst_plugin.mata"

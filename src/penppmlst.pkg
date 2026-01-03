@@ -21,6 +21,7 @@ F penppmlst.ado
 F penppmlst_p.ado
 F penppmlst.sthlp
 f penppmlst_utils.mata
+f penppmlst_rcompat.mata
 f penppmlst.mata
 f penppmlst_cv.mata
 f penppmlst_plugin.mata
