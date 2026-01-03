@@ -4,6 +4,20 @@
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
 *! Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 
+* Initialize Mata code on first use
+cap mata: mata which PenPPML()
+if _rc {
+    * Find the path where this ado file is installed
+    qui findfile penppmlst.ado
+    local adopath = subinstr("`r(fn)'", "penppmlst.ado", "", .)
+
+    * Run the Mata source files
+    cap noi run "`adopath'penppmlst_utils.mata"
+    cap noi run "`adopath'penppmlst.mata"
+    cap noi run "`adopath'penppmlst_cv.mata"
+    cap noi run "`adopath'penppmlst_plugin.mata"
+}
+
 program define penppmlst, eclass sortpreserve
     version 17.0
 
