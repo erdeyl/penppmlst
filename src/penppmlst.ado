@@ -227,9 +227,14 @@ program define penppmlst, eclass sortpreserve
         }
 
         if `has_factor' {
-            // Generate numeric group ID from factor expression using egen
+            // Convert factor expression to variable list for egen group()
+            // i.exp#i.year -> exp year (strip i. prefix, convert # to space)
+            local fe_vars_clean : subinstr local fe_expr "i." "", all
+            local fe_vars_clean : subinstr local fe_vars_clean "#" " ", all
+
+            // Generate numeric group ID from the constituent variables
             tempvar fe_id_`n_fe'
-            qui egen long `fe_id_`n_fe'' = group(`fe_expr') if `touse'
+            qui egen long `fe_id_`n_fe'' = group(`fe_vars_clean') if `touse'
             local fe_list `fe_list' `fe_id_`n_fe''
             local fe_varlist `fe_varlist' `fe_expr'
         }
