@@ -362,8 +362,12 @@ real scalar PenPPML::solve()
         print_header()
     }
 
-    // Initial deviance
-    deviance = compute_deviance(y, mu)
+    // Initial deviance (use R-compatible version if requested)
+    if (r_compatible) {
+        deviance = compute_deviance_r(y, mu)
+    } else {
+        deviance = compute_deviance(y, mu)
+    }
 
     // ===== OUTER IRLS LOOP =====
     for (iter = 1; iter <= maxiter; iter++) {
@@ -439,15 +443,23 @@ real scalar PenPPML::solve()
         }
 
         // Update mu = exp(eta) with numerical bounds
+        // R uses [1e-190, 1e190], Stata uses [1e-10, 1e10] for stability
         mu = exp(eta)
-        mu = clamp_vec(mu, 1e-10, 1e10)
+        if (r_compatible) {
+            mu = clamp_mu_r(mu)
+        } else {
+            mu = clamp_vec(mu, 1e-10, 1e10)
+        }
 
         // ----- Step 5: Check convergence -----
         deviance_old = deviance
-        deviance_new = compute_deviance(y, mu)
-
-        // Relative deviance change
-        eps = abs(deviance_new - deviance_old) / max((abs(deviance_old), 0.1))
+        if (r_compatible) {
+            deviance_new = compute_deviance_r(y, mu)
+            eps = compute_convergence_criterion(deviance_new, deviance_old)
+        } else {
+            deviance_new = compute_deviance(y, mu)
+            eps = abs(deviance_new - deviance_old) / max((abs(deviance_old), 0.1))
+        }
 
         if (verbose) {
             print_iteration(iter, deviance_new, eps, count_selected(beta))

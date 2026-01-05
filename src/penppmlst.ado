@@ -4,7 +4,7 @@
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
 *! Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 
-* Check required dependencies
+* Check required dependencies (ftools is always needed for FE handling)
 cap which ftools
 if _rc {
     di as error "penppmlst requires ftools"
@@ -12,19 +12,13 @@ if _rc {
     exit 198
 }
 
+* reghdfe and ppmlhdfe are optional - only required for hdfe(ppmlhdfe) method
+* Check availability and store in globals for later validation
 cap which reghdfe
-if _rc {
-    di as error "penppmlst requires reghdfe"
-    di as error "Install with: ssc install reghdfe"
-    exit 198
-}
+global PENPPMLST_HAS_REGHDFE = (_rc == 0)
 
 cap which ppmlhdfe
-if _rc {
-    di as error "penppmlst requires ppmlhdfe"
-    di as error "Install with: ssc install ppmlhdfe"
-    exit 198
-}
+global PENPPMLST_HAS_PPMLHDFE = (_rc == 0)
 
 * Check for Stata 19's built-in hdfe command (optional, for future performance)
 cap which hdfe
@@ -215,15 +209,45 @@ program define penppmlst, eclass sortpreserve
     // PARSE FIXED EFFECTS
     // =========================================================================
 
-    // Parse absorb() - simplified parsing
-    // Full implementation would use reghdfe's parsing routines
+    // Parse absorb() and convert factor expressions to numeric group IDs
+    // Supports: simple variables (exp), interactions (exp#year, i.exp#i.year)
     local fe_list ""
+    local fe_varlist ""
     local n_fe = 0
 
     tokenize `absorb'
     while "`1'" != "" {
-        local fe_list `fe_list' `1'
         local ++n_fe
+        local fe_expr "`1'"
+
+        // Check if this is a factor variable expression or interaction
+        local has_factor = 0
+        if strpos("`fe_expr'", "i.") > 0 | strpos("`fe_expr'", "#") > 0 {
+            local has_factor = 1
+        }
+
+        if `has_factor' {
+            // Generate numeric group ID from factor expression using egen
+            tempvar fe_id_`n_fe'
+            qui egen long `fe_id_`n_fe'' = group(`fe_expr') if `touse'
+            local fe_list `fe_list' `fe_id_`n_fe''
+            local fe_varlist `fe_varlist' `fe_expr'
+        }
+        else {
+            // Simple variable - check if it's already numeric
+            capture confirm numeric variable `fe_expr'
+            if _rc {
+                // String variable - convert to numeric
+                tempvar fe_id_`n_fe'
+                qui egen long `fe_id_`n_fe'' = group(`fe_expr') if `touse'
+                local fe_list `fe_list' `fe_id_`n_fe''
+            }
+            else {
+                // Already numeric - use directly
+                local fe_list `fe_list' `fe_expr'
+            }
+            local fe_varlist `fe_varlist' `fe_expr'
+        }
         macro shift
     }
 
