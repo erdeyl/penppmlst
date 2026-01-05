@@ -91,8 +91,15 @@ program define penppmlst_p
     }
 
     qui gen double `mu_temp' = exp(`xb_temp' + `d_temp') if `touse'
-    qui replace `mu_temp' = max(`mu_temp', 1e-10) if `touse'
-    qui replace `mu_temp' = min(`mu_temp', 1e10) if `touse'
+
+    if "`e(r_compatible)'" == "yes" {
+        qui replace `mu_temp' = max(`mu_temp', 1e-190) if `touse'
+        qui replace `mu_temp' = min(`mu_temp', 1e190) if `touse'
+    }
+    else {
+        qui replace `mu_temp' = max(`mu_temp', 1e-10) if `touse'
+        qui replace `mu_temp' = min(`mu_temp', 1e10) if `touse'
+    }
 
     if "`mu'" != "" {
         gen `typlist' `varlist' = `mu_temp' if `touse'
