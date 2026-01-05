@@ -530,7 +530,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
             printf("Computing plugin penalty weights...\n")
         }
         psi = compute_plugin_weights(y, X, fe_ids, w, cluster, hdfe_method)
-        lambda = compute_plugin_lambda(n, p, psi)
+        lambda = compute_plugin_lambda_internal(n, p, psi)
     }
     else if (selection == "bic" | selection == "aic" | selection == "ebic") {
         // Information criteria
@@ -682,7 +682,12 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
                 mu_test = mu_test :* exp(fe_test_contrib)
             }
 
-            mu_test = clamp_vec(mu_test, 1e-10, 1e10)
+            if (r_compatible) {
+                mu_test = clamp_mu_r(mu_test)
+            }
+            else {
+                mu_test = clamp_vec(mu_test, 1e-10, 1e10)
+            }
 
             // Compute test deviance
             dev_test = compute_deviance(y_test, mu_test)
@@ -860,8 +865,8 @@ real colvector compute_plugin_weights(real colvector y, real matrix X,
     return(psi)
 }
 
-real scalar compute_plugin_lambda(real scalar n, real scalar p,
-                                  real colvector psi)
+real scalar compute_plugin_lambda_internal(real scalar n, real scalar p,
+                                           real colvector psi)
 {
     real scalar c, gamma, lambda
 

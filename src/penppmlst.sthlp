@@ -393,9 +393,7 @@ due to numerical precision.
 
 {p 8 8 2}
 R penppml bounds mu in [1e-190, 1e190] while Stata's default (following ppmlhdfe)
-uses [1e-10, 1e10]. The {cmd:r_compatible} option uses R-style bounds inside the
-estimation routine; note that {cmd:predict} currently clamps fitted values to
-[1e-10, 1e10].
+uses [1e-10, 1e10]. The {cmd:r_compatible} option enforces R's bounds.
 
 {p 8 8 2}
 {it:Expected magnitude}: Affects convergence behavior, rarely affects final
