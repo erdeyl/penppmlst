@@ -5,6 +5,7 @@
 {viewerjumpto "Options" "penppmlst##options"}{...}
 {viewerjumpto "Selection Methods" "penppmlst##selection"}{...}
 {viewerjumpto "Examples" "penppmlst##examples"}{...}
+{viewerjumpto "Postestimation" "penppmlst##postestimation"}{...}
 {viewerjumpto "Stored results" "penppmlst##results"}{...}
 {viewerjumpto "Methods" "penppmlst##methods"}{...}
 {viewerjumpto "R vs Stata Differences" "penppmlst##differences"}{...}
@@ -55,6 +56,7 @@
 {syntab:HDFE Method}
 {synopt:{opt hdfe(string)}}HDFE backend: {bf:mata} or {bf:ppmlhdfe}; default is {bf:mata}{p_end}
 {synopt:{opt r_compatible}}use R penppml-compatible settings for reproducibility{p_end}
+{synopt:{opt d(varname)}}store fixed effects contribution in {it:varname} for predict{p_end}
 
 {syntab:Reporting}
 {synopt:{opt irr}}report incidence rate ratios{p_end}
@@ -222,6 +224,12 @@ to the R penppml package. Implies {cmd:hdfe(mata)} and uses R-compatible
 lambda scaling, mu bounds, and deviance computation. Use this option when you
 need to replicate R results or compare estimates across platforms.
 
+{phang}
+{opt d(varname)} creates a new variable containing the fixed effects contribution
+(on the log scale) for each observation. This variable is required for predictions
+that include fixed effects (mu, xbd, d, residuals). The FE contribution is computed
+as the difference between the full linear predictor and the X*beta component.
+
 
 {marker selection}{...}
 {title:Selection Methods}
@@ -285,6 +293,56 @@ conservative in high-dimensional settings.
 {pstd}R-compatible estimation for cross-platform reproducibility{p_end}
 {phang2}{cmd:. penppmlst trade provision1-provision100, absorb(i.pair i.year) selection(plugin) r_compatible}{p_end}
 
+{pstd}With FE contribution for predictions{p_end}
+{phang2}{cmd:. penppmlst trade tariff distance, absorb(i.exp i.imp i.year) selection(plugin) d(fe_contrib)}{p_end}
+{phang2}{cmd:. predict fitted_values, mu}{p_end}
+{phang2}{cmd:. predict residuals, residuals}{p_end}
+
+
+{marker postestimation}{...}
+{title:Postestimation commands}
+
+{pstd}
+The following postestimation command is available after {cmd:penppmlst}:
+
+{synoptset 17}{...}
+{synopt:Command}Description{p_end}
+{synoptline}
+{synopt:{helpb penppmlst postestimation##predict:predict}}predictions, residuals, etc.{p_end}
+{synoptline}
+
+{marker predict}{...}
+{title:predict after penppmlst}
+
+{p 8 17 2}
+{cmd:predict}
+{newvar}
+{ifin}
+[{cmd:,} {it:statistic}]
+
+{synoptset 17 tabbed}{...}
+{synopthdr:statistic}
+{synoptline}
+{syntab:Main}
+{synopt:{opt mu}}predicted mean exp(xb+d); the default{p_end}
+{synopt:{opt xb}}linear predictor xb (without FE){p_end}
+{synopt:{opt xbd}}linear predictor xb+d (including FE){p_end}
+{synopt:{opt eta}}same as {opt xbd}{p_end}
+{synopt:{opt d}}fixed effect contribution only{p_end}
+{synopt:{opt res:iduals}}response residuals y - mu{p_end}
+{synopt:{opt dev:iance}}deviance residuals{p_end}
+{synopt:{opt pear:son}}Pearson residuals{p_end}
+{synopt:{opt ans:combe}}Anscombe residuals{p_end}
+{synopt:{opt sco:res}}score (first derivative of log-likelihood){p_end}
+{synopt:{opt sel:ected}}indicator for selected variables{p_end}
+{synoptline}
+
+{pstd}
+{bf:Important:} Predictions that require FE contribution ({opt mu}, {opt xbd}, {opt d},
+{opt residuals}, {opt deviance}, {opt pearson}, {opt anscombe}, {opt scores}) require
+the {opt d(varname)} option to have been specified in the estimation command.
+If you did not specify {opt d()}, re-run {cmd:penppmlst} with this option.
+
 
 {marker results}{...}
 {title:Stored results}
@@ -313,6 +371,7 @@ conservative in high-dimensional settings.
 {synopt:{cmd:e(selection)}}lambda selection method{p_end}
 {synopt:{cmd:e(hdfe)}}HDFE method used (mata or ppmlhdfe){p_end}
 {synopt:{cmd:e(r_compatible)}}yes if R-compatible mode{p_end}
+{synopt:{cmd:e(d)}}name of FE contribution variable (if {opt d()} specified){p_end}
 
 {p2col 5 20 24 2: Matrices}{p_end}
 {synopt:{cmd:e(b)}}coefficient vector{p_end}

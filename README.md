@@ -6,16 +6,18 @@ Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects 
 
 `penppmlst` is a Stata package for estimating penalized PPML regressions with lasso, ridge, or elastic net penalties for models with high-dimensional fixed effects.
 
-This is a Stata implementation based on the R package [penppmlst](https://github.com/tomzylkin/penppmlst) by Breinlich, Corradi, Rocha, Ruta, Santos Silva, and Zylkin (2021).
+This is a Stata implementation based on the R package [penppml](https://github.com/tomzylkin/penppml) by Breinlich, Corradi, Rocha, Ruta, Santos Silva, and Zylkin (2021).
 
 ## Features
 
 - **Lasso, Ridge, and Elastic Net penalties** for variable selection and regularization
-- **High-Dimensional Fixed Effects** via alternating projections (Gaure 2013)
-- **Cross-Validation** for automatic penalty parameter selection
-- **Plugin Lasso** with heteroskedasticity-robust penalty weights (Belloni et al. 2016)
+- **High-Dimensional Fixed Effects** via alternating projections (Gaure 2013) or ppmlhdfe backend
+- **Cross-Validation** for automatic penalty parameter selection with FE-aware scoring
+- **Plugin Lasso** with heteroskedasticity-robust and cluster-robust penalty weights (Belloni et al. 2016)
 - **Post-lasso estimation** with valid standard errors
 - **Information Criteria** selection (AIC, BIC, EBIC)
+- **R-compatible mode** for exact replication of R penppml results
+- **Comprehensive predict** with fitted values, residuals, and FE contributions
 
 ## Installation
 
@@ -30,8 +32,14 @@ net install penppmlst, from("https://raw.githubusercontent.com/erdeyl/penppmlst/
 Requires Stata 17 or higher, plus:
 
 ```stata
-ssc install reghdfe
 ssc install ftools
+```
+
+Optional (for `hdfe(ppmlhdfe)` backend):
+
+```stata
+ssc install reghdfe
+ssc install ppmlhdfe
 ```
 
 ## Syntax
@@ -71,6 +79,9 @@ penppmlst depvar indepvars, absorb(absvars) [options]
 | `nostandardize` | Do not standardize regressors |
 | `tolerance(#)` | Convergence tolerance (default: 1e-8) |
 | `maxiter(#)` | Maximum iterations (default: 1000) |
+| `hdfe(mata\|ppmlhdfe)` | HDFE backend (default: mata) |
+| `r_compatible` | Use R penppml-compatible settings |
+| `d(varname)` | Store FE contribution for predict |
 
 ### Reporting
 
@@ -80,6 +91,29 @@ penppmlst depvar indepvars, absorb(absvars) [options]
 | `level(#)` | Confidence level |
 | `verbose` | Show iteration log |
 
+## Postestimation
+
+### Predict
+
+After estimation, use `predict` to generate fitted values and residuals:
+
+```stata
+predict newvar [if] [in] , [mu xb xbd d residuals deviance pearson anscombe scores]
+```
+
+| Option | Description |
+|--------|-------------|
+| `mu` | Predicted mean exp(xb+d) (default) |
+| `xb` | Linear predictor (without FE) |
+| `xbd` | Linear predictor including FE |
+| `d` | Fixed effect contribution only |
+| `residuals` | Response residuals (y - mu) |
+| `deviance` | Deviance residuals |
+| `pearson` | Pearson residuals |
+| `anscombe` | Anscombe residuals |
+
+**Note:** Predictions requiring FE (mu, xbd, d, residuals) need the `d()` option in the estimation command.
+
 ## Examples
 
 ```stata
@@ -87,7 +121,7 @@ penppmlst depvar indepvars, absorb(absvars) [options]
 penppmlst trade tariff distance, absorb(i.exporter i.importer i.year) ///
     penalty(lasso) lambda(0.1)
 
-* Cross-validation for lambda selection
+* Cross-validation for lambda selection with post-lasso
 penppmlst trade x1-x100, absorb(i.pair i.year) ///
     selection(cv) nfolds(5) post
 
@@ -102,6 +136,16 @@ penppmlst trade gravity_vars, absorb(i.exp#i.imp) ///
 * Elastic net
 penppmlst trade vars, absorb(i.exp i.imp i.year) ///
     penalty(elasticnet) alpha(0.5) selection(cv)
+
+* With FE contribution for predictions
+penppmlst trade tariff distance, absorb(i.exp i.imp i.year) ///
+    selection(plugin) d(fe_contrib)
+predict fitted_values, mu
+predict residuals, residuals
+
+* R-compatible mode for cross-platform reproducibility
+penppmlst trade provisions, absorb(i.pair i.year) ///
+    selection(plugin) r_compatible d(fe_contrib)
 ```
 
 ## Stored Results
@@ -124,6 +168,9 @@ penppmlst trade vars, absorb(i.exp i.imp i.year) ///
 | `e(selected)` | Names of selected variables |
 | `e(penalty)` | Penalty type used |
 | `e(selection)` | Selection method |
+| `e(hdfe)` | HDFE method used |
+| `e(r_compatible)` | "yes" if R-compatible mode |
+| `e(d)` | FE contribution variable name |
 
 ### Matrices
 

@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Example: Penalized PPML for Gravity Model Estimation
 * Package: penppmlst
-* Version: 0.1.0
+* Version: 0.5.0
 *
 * This example demonstrates using penppmlst to estimate a gravity model of
 * international trade with many potential trade agreement provisions.
@@ -14,16 +14,8 @@ set more off
 * SETUP
 * ============================================================================
 
-* Set path to source files (adjust as needed)
-* After net install, files are in your ado path
-
-* Load Mata source files
-run "penppmlst_utils.mata"
-run "penppmlst.mata"
-run "penppmlst_cv.mata"
-run "penppmlst_plugin.mata"
-
-* Load ado files
+* After net install, penppmlst is available automatically
+* net install penppmlst, from("https://raw.githubusercontent.com/erdeyl/penppmlst/main/src") replace
 
 
 * ============================================================================
@@ -125,22 +117,23 @@ di as txt "EXAMPLE 3: Penalized PPML with Cross-Validation"
 di as txt "{hline 70}" _n
 
 * Use cross-validation to select lambda
+* Note: d(fe_contrib) stores FE contribution for predictions
 penppmlst trade prov1-prov`n_prov', ///
     absorb(exporter importer year) ///
     penalty(lasso) ///
     selection(cv) nfolds(5) nlambda(20) ///
-    post
+    post d(fe_contrib_cv)
 
 * Show results
 di as txt _n "Lambda selected by CV: " as res e(lambda)
 di as txt "Variables selected: " as res e(n_selected) " / `n_prov'"
 di as txt "Selected: `e(selected)'"
 
-* Prediction
+* Prediction (requires d() option in estimation)
 predict mu_cv, mu
 predict resid_cv, residuals
 
-summarize mu_cv resid_cv
+summarize mu_cv resid_cv fe_contrib_cv
 
 di as txt _n "{hline 70}"
 di as txt "EXAMPLE 4: Plugin Lasso"
@@ -202,6 +195,21 @@ reghdfe trade ln_dist contig comlang colony, ///
 
 * Step 2: Apply penalized PPML to residuals (simplified approach)
 * Note: For proper implementation, integrate unpenalized controls directly
+
+di as txt _n "{hline 70}"
+di as txt "EXAMPLE 8: R-Compatible Mode"
+di as txt "{hline 70}" _n
+
+* Use r_compatible for cross-platform reproducibility with R penppml
+penppmlst trade prov1-prov`n_prov', ///
+    absorb(exporter importer year) ///
+    selection(plugin) cluster(pair) ///
+    r_compatible d(fe_contrib_r)
+
+di as txt "R-compatible mode uses:"
+di as txt "  - R-style mu bounds [1e-190, 1e190]"
+di as txt "  - R-style deviance computation"
+di as txt "  - Pure Mata HDFE (matching R's collapse::fhdwithin)"
 
 di as txt _n "{hline 70}"
 di as txt "SUMMARY"
