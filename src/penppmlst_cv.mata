@@ -75,6 +75,7 @@ void PenPPML_CV::new()
     nlambda = 100
     tol = 1e-8
     maxiter = 100
+    real colvector fe_test_contrib
     standardize = 1
 }
 
@@ -248,6 +249,15 @@ void PenPPML_CV::run()
             // Predict on test data
             eta_test = X_test * M.beta
             mu_test = exp(eta_test)
+
+            // If FEs are present, add FE contribution for test data
+            // by mapping training FE groups onto test observations.
+            if (rows(fe_train) > 0) {
+                fe_test_contrib = apply_fe_to_test(y_train, M.mu, M.beta,
+                                                   X_test, fe_train, fe_test)
+                mu_test = mu_test :* exp(fe_test_contrib)
+            }
+
             mu_test = clamp_vec(mu_test, 1e-10, 1e10)
 
             // Compute score
@@ -442,9 +452,11 @@ void PenPPML_RollingCV::run()
     real colvector train_idx, test_idx
     real colvector y_train, y_test, w_train
     real matrix X_train, X_test
+    real matrix fe_train, fe_test
     class PenPPML scalar M
     real colvector mu_test
     real scalar score
+    real colvector fe_test_contrib
 
     // Count windows
     n_windows = floor((n - origin - horizon) / step) + 1
@@ -478,14 +490,33 @@ void PenPPML_RollingCV::run()
         X_test = X[test_idx, .]
         w_train = w[train_idx]
 
+        if (rows(fe_ids) > 0) {
+            fe_train = fe_ids[train_idx, .]
+            fe_test = fe_ids[test_idx, .]
+        }
+        else {
+            fe_train = J(0, 0, .)
+            fe_test = J(0, 0, .)
+        }
+
         for (lam_idx = 1; lam_idx <= nlambda; lam_idx++) {
             M = PenPPML()
             M.set_data(y_train, X_train, J(rows(y_train), 0, .), w_train)
+            if (rows(fe_train) > 0) {
+                M.set_fe(fe_train)
+            }
             M.set_penalty(penalty, lambdas[lam_idx], alpha, psi)
             M.set_options(tol, maxiter, 1, 0)
             M.solve()
 
             mu_test = exp(X_test * M.beta)
+
+            if (rows(fe_train) > 0) {
+                fe_test_contrib = apply_fe_to_test(y_train, M.mu, M.beta,
+                                                   X_test, fe_train, fe_test)
+                mu_test = mu_test :* exp(fe_test_contrib)
+            }
+
             mu_test = clamp_vec(mu_test, 1e-10, 1e10)
             score = compute_deviance(y_test, mu_test) / rows(y_test)
             cv_scores[lam_idx, window] = score
