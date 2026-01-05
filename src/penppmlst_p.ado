@@ -1,4 +1,4 @@
-*! version 0.5.0  04jan2026
+*! version 0.5.0  05jan2026
 *! penppmlst_p: Predict command for penppmlst
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary

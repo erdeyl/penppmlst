@@ -1,0 +1,15 @@
+
+
+. * Net install check for penppmlst
+. clear all
+
+. set more off
+
+. 
+. log using "net_check.log", replace text
+file C:\Users\erdey\Claude\penppmlst\net_check.log cannot be modified or
+    erased; likely cause is read-only directory or file
+r(608);
+
+end of do-file
+r(608);

@@ -1,4 +1,4 @@
-*! version 0.5.0  04jan2026
+*! version 0.5.0  05jan2026
 *! R-compatible functions for penppmlst package
 *! These functions ensure mathematical equivalence with R penppml
 *! Stata implementation by Erdey, László (2026)

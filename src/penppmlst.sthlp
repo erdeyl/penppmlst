@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 0.5.0  04jan2026}{...}
+{* *! version 0.5.0  05jan2026}{...}
 {viewerjumpto "Syntax" "penppmlst##syntax"}{...}
 {viewerjumpto "Description" "penppmlst##description"}{...}
 {viewerjumpto "Options" "penppmlst##options"}{...}

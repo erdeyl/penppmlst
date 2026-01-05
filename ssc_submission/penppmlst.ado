@@ -1,4 +1,4 @@
-*! version 0.5.0  04jan2026
+*! version 0.5.0  05jan2026
 *! penppmlst: Penalized Poisson Pseudo Maximum Likelihood with High-Dimensional Fixed Effects
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
@@ -43,9 +43,6 @@ if _rc {
     cap noi run "`adopath'penppmlst.mata"
     cap noi run "`adopath'penppmlst_cv.mata"
     cap noi run "`adopath'penppmlst_plugin.mata"
-    cap noi run "`adopath'penppmlst_iceberg.mata"
-    cap noi run "`adopath'penppmlst_bootstrap.mata"
-    cap noi run "`adopath'penppmlst_glm.mata"
 }
 
 program define penppmlst, eclass sortpreserve

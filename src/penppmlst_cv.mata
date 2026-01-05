@@ -1,4 +1,4 @@
-*! version 0.5.0  04jan2026
+*! version 0.5.0  05jan2026
 *! Cross-validation routines for penppmlst package
 *! Stata implementation by Erdey, László (2026)
 *!   Faculty of Economics and Business, University of Debrecen, Hungary

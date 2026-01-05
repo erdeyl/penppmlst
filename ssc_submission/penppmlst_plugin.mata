@@ -1,4 +1,4 @@
-*! version 0.5.0  04jan2026
+*! version 0.5.0  05jan2026
 *! Plugin lasso routines for penppmlst package
 *! Implements penalty weight computation following Belloni, Chernozhukov, Hansen, Kozbur (2016)
 *! Stata implementation by Erdey, László (2026)

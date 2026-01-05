@@ -6,7 +6,7 @@ d Affiliation: Faculty of Economics and Business, University of Debrecen, Hungar
 d
 d Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 d
-d Distribution-Date: 20260104
+d Distribution-Date: 20260105
 d
 d penppmlst fits penalized Poisson Pseudo Maximum Likelihood (PPML) regressions
 d with high-dimensional fixed effects (HDFE). Supports lasso, ridge, and
