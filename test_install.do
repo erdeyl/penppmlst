@@ -4,9 +4,15 @@
 clear all
 set more off
 
-* Display Stata version
+* Display Stata version and enforce minimum requirement
 di "Stata version: " c(stata_version)
 di "Current date: " c(current_date)
+
+local stata_ver = real(c(stata_version))
+if missing(`stata_ver') | `stata_ver' < 19.5 {
+    di as error "penppmlst installation tests require Stata 19.5 (Statanow 19.5 recommended)"
+    exit 9
+}
 
 * ============================================================================
 * Test 1: net install from GitHub

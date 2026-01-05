@@ -43,9 +43,6 @@ if _rc {
     cap noi run "`adopath'penppmlst.mata"
     cap noi run "`adopath'penppmlst_cv.mata"
     cap noi run "`adopath'penppmlst_plugin.mata"
-    cap noi run "`adopath'penppmlst_iceberg.mata"
-    cap noi run "`adopath'penppmlst_bootstrap.mata"
-    cap noi run "`adopath'penppmlst_glm.mata"
 }
 
 program define penppmlst, eclass sortpreserve

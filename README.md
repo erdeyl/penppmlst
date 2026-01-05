@@ -27,7 +27,7 @@ net install penppmlst, from("https://raw.githubusercontent.com/erdeyl/penppmlst/
 
 ### Dependencies
 
-Requires Stata 17 or higher, plus:
+Requires Stata 19.5 (Statanow 19.5 preferred) to run the test scripts and examples, plus:
 
 ```stata
 ssc install reghdfe
