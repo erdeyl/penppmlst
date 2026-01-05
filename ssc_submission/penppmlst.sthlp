@@ -392,7 +392,7 @@ due to numerical precision.
 {bf:2. Mu Bounds (Fitted Values)}
 
 {p 8 8 2}
-R penppml bounds mu in [1e-5, 1e10] while Stata's default (following ppmlhdfe)
+R penppml bounds mu in [1e-190, 1e190] while Stata's default (following ppmlhdfe)
 uses [1e-10, 1e10]. The {cmd:r_compatible} option enforces R's bounds.
 
 {p 8 8 2}
@@ -404,8 +404,9 @@ coefficients by more than 1e-6.
 
 {p 8 8 2}
 R glmnet scales lambda by 1/n (lambda_glmnet = lambda/n), while Stata's
-coordinate descent uses unscaled lambda. The internal implementation adjusts
-for this, but cross-validation may select slightly different lambda values.
+coordinate descent uses unscaled lambda. The package provides helpers for
+glmnet-style scaling to improve comparability, but cross-validation may select
+slightly different lambda values across platforms.
 
 {p 8 8 2}
 {it:Expected magnitude}: Lambda values may differ, but selected variables
@@ -456,7 +457,7 @@ To maximize reproducibility with R penppml:
 This combination:
 
 {p 8 12 2}
-- Uses R-compatible mu bounds [1e-5, 1e10]
+- Uses R-compatible mu bounds [1e-190, 1e190] inside estimation
 
 {p 8 12 2}
 - Uses pure alternating projections for HDFE (matching collapse::fhdwithin)

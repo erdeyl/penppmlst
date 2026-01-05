@@ -453,4 +453,288 @@ real scalar compute_ebic(real scalar ll, real scalar k, real scalar n,
 // END OF UTILITY FUNCTIONS
 // ============================================================================
 
+
+
+// ============================================================================
+// COMPRESS FE IDENTIFIERS TO CONTIGUOUS 1..G
+// Maps arbitrary FE values to sequential integers for safe array indexing
+// Returns: compressed IDs and number of groups per FE dimension
+// ============================================================================
+
+void compress_fe_ids(real matrix fe_ids_in, real matrix fe_ids_out,
+                     real rowvector n_groups)
+{
+    real scalar n, n_fe, k, i
+    real colvector unique_vals, fe_col
+    real scalar n_unique
+
+    n = rows(fe_ids_in)
+    n_fe = cols(fe_ids_in)
+
+    fe_ids_out = J(n, n_fe, .)
+    n_groups = J(1, n_fe, .)
+
+    for (k = 1; k <= n_fe; k++) {
+        fe_col = fe_ids_in[., k]
+        unique_vals = uniqrows(fe_col)
+        n_unique = rows(unique_vals)
+        n_groups[k] = n_unique
+
+        // Map each value to its position in unique_vals (1..n_unique)
+        for (i = 1; i <= n; i++) {
+            fe_ids_out[i, k] = sum(unique_vals :<= fe_col[i])
+        }
+    }
+}
+
+// Single column version for convenience
+real colvector compress_fe_col(real colvector fe_col, | real scalar n_groups)
+{
+    real colvector unique_vals, fe_compressed
+    real scalar n, i
+
+    n = rows(fe_col)
+    unique_vals = uniqrows(fe_col)
+    n_groups = rows(unique_vals)
+
+    fe_compressed = J(n, 1, .)
+    for (i = 1; i <= n; i++) {
+        fe_compressed[i] = sum(unique_vals :<= fe_col[i])
+    }
+
+    return(fe_compressed)
+}
+
+// ============================================================================
+// CLUSTER-ROBUST VARIANCE MATRIX FOR SCORES
+// Computes: sum_g (sum_{i in g} x_i * e_i)' (sum_{i in g} x_i * e_i)
+// Where g indexes clusters
+// ============================================================================
+
+real matrix cluster_matrix(real colvector scores, real colvector cluster_ids,
+                           real matrix X)
+{
+    real scalar n, p, n_clusters, g, i
+    real colvector unique_clusters, cluster_compressed
+    real matrix cluster_scores, V
+
+    n = rows(X)
+    p = cols(X)
+
+    // Compress cluster IDs to 1..G
+    cluster_compressed = compress_fe_col(cluster_ids, n_clusters)
+
+    // Accumulate scores by cluster: X_g' * e_g for each cluster g
+    cluster_scores = J(n_clusters, p, 0)
+
+    for (i = 1; i <= n; i++) {
+        g = cluster_compressed[i]
+        cluster_scores[g, .] = cluster_scores[g, .] + scores[i] * X[i, .]
+    }
+
+    // Compute variance: sum of outer products
+    V = quadcross(cluster_scores, cluster_scores)
+
+    return(V)
+}
+
+// ============================================================================
+// COMPUTE WEIGHTED GROUP MEANS EFFICIENTLY
+// For FE demeaning with compressed FE IDs
+// ============================================================================
+
+real colvector compute_group_means(real colvector v, real colvector w,
+                                   real colvector fe_ids, real scalar n_groups)
+{
+    real scalar n, i, g
+    real colvector group_sums, group_weights, group_means
+
+    n = rows(v)
+    group_sums = J(n_groups, 1, 0)
+    group_weights = J(n_groups, 1, 0)
+
+    // Accumulate
+    for (i = 1; i <= n; i++) {
+        g = fe_ids[i]
+        group_sums[g] = group_sums[g] + w[i] * v[i]
+        group_weights[g] = group_weights[g] + w[i]
+    }
+
+    // Compute means (avoid division by zero)
+    group_means = group_sums :/ (group_weights :+ (group_weights :== 0))
+
+    return(group_means)
+}
+
+// ============================================================================
+// RECOVER FIXED EFFECT VALUES FROM ESTIMATION
+// Implements PPML FOC iteration: FE_g = sum_g(y) / sum_g(mu)
+// Similar to R penppml's compute_fes()
+// ============================================================================
+
+real colvector recover_fe_values(real colvector y, real colvector mu,
+                                 real colvector fe_ids, real scalar n_groups,
+                                 | real scalar tol, real scalar maxiter)
+{
+    real scalar n, iter, converged
+    real colvector fe_values, y_sums, mu_adj_sums, adj
+    real scalar crit, old_dev, dev, g, i
+    real colvector dev_term
+
+    if (args() < 5 | tol == .) tol = 1e-8
+    if (args() < 6 | maxiter == .) maxiter = 100
+
+    n = rows(y)
+
+    // Initialize FE values to 1 (multiplicative)
+    fe_values = J(n_groups, 1, 1)
+
+    // Compute sum of y by group (constant)
+    y_sums = J(n_groups, 1, 0)
+    for (i = 1; i <= n; i++) {
+        y_sums[fe_ids[i]] = y_sums[fe_ids[i]] + y[i]
+    }
+
+    old_dev = 0
+    converged = 0
+
+    for (iter = 1; iter <= maxiter; iter++) {
+        // Compute sum of adjusted mu by group
+        mu_adj_sums = J(n_groups, 1, 0)
+        for (i = 1; i <= n; i++) {
+            g = fe_ids[i]
+            mu_adj_sums[g] = mu_adj_sums[g] + mu[i] * fe_values[g]
+        }
+
+        // Update FE values using PPML FOC: FE_g *= y_sum_g / mu_adj_sum_g
+        adj = y_sums :/ (mu_adj_sums :+ (mu_adj_sums :== 0))
+        adj = adj :* (y_sums :> 0) + (y_sums :== 0)  // Set to 1 where y_sum = 0
+        fe_values = fe_values :* adj
+
+        // Check convergence via deviance
+        dev_term = J(n, 1, 0)
+        for (i = 1; i <= n; i++) {
+            g = fe_ids[i]
+            if (y[i] > 0) {
+                dev_term[i] = y[i] * ln(y[i] / (mu[i] * fe_values[g])) -
+                              (y[i] - mu[i] * fe_values[g])
+            } else {
+                dev_term[i] = mu[i] * fe_values[g]
+            }
+        }
+        dev = 2 * sum(dev_term)
+
+        crit = abs(dev - old_dev) / max((min((dev, old_dev)), 0.1))
+        if (crit < tol) {
+            converged = 1
+            break
+        }
+        old_dev = dev
+    }
+
+    return(fe_values)
+}
+
+
+// ============================================================================
+// APPLY FE VALUES TO TEST DATA FOR CV SCORING
+// Recovers FE contribution for out-of-sample observations
+// Uses the approach from R penppml: estimate FE values from training data
+// and apply them to test observations that share FE groups
+// ============================================================================
+
+// Binary search for a value in a sorted real vector.
+// Returns index in [1..rows(v)] if found, else 0.
+real scalar bsearch_sorted_real(real colvector v, real scalar key)
+{
+    real scalar lo, hi, mid
+
+    if (key == .) return(0)
+    lo = 1
+    hi = rows(v)
+
+    while (lo <= hi) {
+        mid = floor((lo + hi) / 2)
+        if (v[mid] == key) return(mid)
+        if (v[mid] < key) lo = mid + 1
+        else hi = mid - 1
+    }
+
+    return(0)
+}
+
+real colvector apply_fe_to_test(real colvector y_train, real colvector mu_train,
+                                real colvector beta, real matrix X_test,
+                                real matrix fe_train, real matrix fe_test)
+{
+    real scalar n_test, n_train, n_fe, k, i, g
+    real colvector fe_contrib_test
+    real colvector fe_train_compressed, n_groups_vec
+    real scalar n_groups
+    real colvector fe_values_k, y_sums, mu_sums, fe_test_k
+    real matrix fe_test_compressed
+    real scalar fe_val
+    real colvector fe_train_k, fe_train_k_sorted
+    real colvector fe_group_sorted
+    real colvector fe_orig_by_group
+    real colvector ord
+    real scalar grp
+
+    n_test = rows(X_test)
+    n_train = rows(y_train)
+    n_fe = cols(fe_train)
+
+    // Initialize test FE contribution to 0 (log scale)
+    fe_contrib_test = J(n_test, 1, 0)
+
+    // Process each FE dimension
+    for (k = 1; k <= n_fe; k++) {
+        fe_train_k = fe_train[., k]
+
+        // Compress training FE IDs
+        fe_train_compressed = compress_fe_col(fe_train_k, n_groups)
+
+        // Compute FE values from training data: FE_g = sum_g(y) / sum_g(mu)
+        y_sums = J(n_groups, 1, 0)
+        mu_sums = J(n_groups, 1, 0)
+
+        for (i = 1; i <= n_train; i++) {
+            g = fe_train_compressed[i]
+            y_sums[g] = y_sums[g] + y_train[i]
+            mu_sums[g] = mu_sums[g] + mu_train[i]
+        }
+
+        // FE values (multiplicative scale) avoiding division by zero
+        fe_values_k = y_sums :/ (mu_sums :+ (mu_sums :== 0))
+        fe_values_k = fe_values_k :* (mu_sums :> 0) + (mu_sums :== 0)
+
+        // Build a fast lookup for test IDs by:
+        // 1) sorting training IDs,
+        // 2) recording one representative original ID per compressed group,
+        // 3) binary searching that sorted representative vector.
+        ord = order(fe_train_k, 1)
+        fe_train_k_sorted = fe_train_k[ord]
+        fe_group_sorted = fe_train_compressed[ord]
+
+        fe_orig_by_group = J(n_groups, 1, .)
+        for (i = 1; i <= n_train; i++) {
+            g = fe_group_sorted[i]
+            if (fe_orig_by_group[g] == .) fe_orig_by_group[g] = fe_train_k_sorted[i]
+        }
+
+        // Map test FE IDs to training FE groups
+        fe_test_k = fe_test[., k]
+
+        for (i = 1; i <= n_test; i++) {
+            // Find matching group for this test observation
+            fe_val = 1  // Default: no FE adjustment
+            grp = bsearch_sorted_real(fe_orig_by_group, fe_test_k[i])
+            if (grp > 0) fe_val = fe_values_k[grp]
+            fe_contrib_test[i] = fe_contrib_test[i] + ln(max((fe_val, 1e-10)))
+        }
+    }
+
+    return(fe_contrib_test)
+}
+
 end

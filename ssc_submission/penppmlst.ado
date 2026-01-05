@@ -4,7 +4,7 @@
 *!   Faculty of Economics and Business, University of Debrecen, Hungary
 *! Based on R penppml by Breinlich, Corradi, Rocha, Ruta, Santos Silva, Zylkin
 
-* Check required dependencies
+* Check required dependencies (ftools is always needed for FE handling)
 cap which ftools
 if _rc {
     di as error "penppmlst requires ftools"
@@ -12,19 +12,13 @@ if _rc {
     exit 198
 }
 
+* reghdfe and ppmlhdfe are optional - only required for hdfe(ppmlhdfe) method
+* Check availability and store in globals for later validation
 cap which reghdfe
-if _rc {
-    di as error "penppmlst requires reghdfe"
-    di as error "Install with: ssc install reghdfe"
-    exit 198
-}
+global PENPPMLST_HAS_REGHDFE = (_rc == 0)
 
 cap which ppmlhdfe
-if _rc {
-    di as error "penppmlst requires ppmlhdfe"
-    di as error "Install with: ssc install ppmlhdfe"
-    exit 198
-}
+global PENPPMLST_HAS_PPMLHDFE = (_rc == 0)
 
 * Check for Stata 19's built-in hdfe command (optional, for future performance)
 cap which hdfe
@@ -74,6 +68,7 @@ program define penppmlst, eclass sortpreserve
         NOLOg                                   /// Suppress iteration log
         HDFE(string)                            /// HDFE method: mata or ppmlhdfe
         R_compatible                            /// Use R penppml-compatible settings
+        D(name)                                 /// Store FE contribution in variable
         ]
 
     // =========================================================================
@@ -214,15 +209,50 @@ program define penppmlst, eclass sortpreserve
     // PARSE FIXED EFFECTS
     // =========================================================================
 
-    // Parse absorb() - simplified parsing
-    // Full implementation would use reghdfe's parsing routines
+    // Parse absorb() and convert factor expressions to numeric group IDs
+    // Supports: simple variables (exp), interactions (exp#year, i.exp#i.year)
     local fe_list ""
+    local fe_varlist ""
     local n_fe = 0
 
     tokenize `absorb'
     while "`1'" != "" {
-        local fe_list `fe_list' `1'
         local ++n_fe
+        local fe_expr "`1'"
+
+        // Check if this is a factor variable expression or interaction
+        local has_factor = 0
+        if strpos("`fe_expr'", "i.") > 0 | strpos("`fe_expr'", "#") > 0 {
+            local has_factor = 1
+        }
+
+        if `has_factor' {
+            // Convert factor expression to variable list for egen group()
+            // i.exp#i.year -> exp year (strip i. prefix, convert # to space)
+            local fe_vars_clean : subinstr local fe_expr "i." "", all
+            local fe_vars_clean : subinstr local fe_vars_clean "#" " ", all
+
+            // Generate numeric group ID from the constituent variables
+            tempvar fe_id_`n_fe'
+            qui egen long `fe_id_`n_fe'' = group(`fe_vars_clean') if `touse'
+            local fe_list `fe_list' `fe_id_`n_fe''
+            local fe_varlist `fe_varlist' `fe_expr'
+        }
+        else {
+            // Simple variable - check if it's already numeric
+            capture confirm numeric variable `fe_expr'
+            if _rc {
+                // String variable - convert to numeric
+                tempvar fe_id_`n_fe'
+                qui egen long `fe_id_`n_fe'' = group(`fe_expr') if `touse'
+                local fe_list `fe_list' `fe_id_`n_fe''
+            }
+            else {
+                // Already numeric - use directly
+                local fe_list `fe_list' `fe_expr'
+            }
+            local fe_varlist `fe_varlist' `fe_expr'
+        }
         macro shift
     }
 
@@ -288,10 +318,37 @@ program define penppmlst, eclass sortpreserve
                            "`hdfe'", `do_r_compat')
 
     // =========================================================================
+    // STORE FE CONTRIBUTION IF d() SPECIFIED
+    // =========================================================================
+
+    if "`d'" != "" {
+        // Get FE contribution from Mata and store in variable
+        // Must do this before restore since we're working with preserved data
+        tempvar fe_contrib_temp
+        qui gen double `fe_contrib_temp' = .
+        mata: st_store(., "`fe_contrib_temp'", penppmlst_fe_contrib)
+        local d_tempvar "`fe_contrib_temp'"
+    }
+
+    // =========================================================================
     // POST RESULTS
     // =========================================================================
 
-    restore
+    // Use restore with preserve to keep the d variable if specified
+    if "`d'" != "" {
+        // Merge FE contribution back to original data after restore
+        tempfile fe_temp
+        qui keep `touse' `d_tempvar'
+        qui save `fe_temp', replace
+        restore
+        qui merge 1:1 _n using `fe_temp', nogen
+        qui gen double `d' = `d_tempvar' if `touse'
+        qui drop `d_tempvar'
+        label var `d' "Fixed effects contribution (ln scale)"
+    }
+    else {
+        restore
+    }
 
     // Get results from Mata
     tempname beta_mat V_mat
@@ -351,6 +408,11 @@ program define penppmlst, eclass sortpreserve
     mata: st_local("selected_vars", penppmlst_selected_names)
     ereturn local selected "`selected_vars'"
 
+    // Store FE contribution variable name if d() was specified
+    if "`d'" != "" {
+        ereturn local d "`d'"
+    }
+
     // =========================================================================
     // DISPLAY RESULTS
     // =========================================================================
@@ -399,6 +461,7 @@ real scalar penppmlst_deviance
 real scalar penppmlst_ll
 real scalar penppmlst_n_selected
 string scalar penppmlst_selected_names
+real colvector penppmlst_fe_contrib
 
 void penppmlst_estimate(string scalar depvar, string scalar indepvars,
                       string scalar fe_vars, string scalar wvar,
@@ -467,7 +530,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
             printf("Computing plugin penalty weights...\n")
         }
         psi = compute_plugin_weights(y, X, fe_ids, w, cluster, hdfe_method)
-        lambda = compute_plugin_lambda(n, p, psi)
+        lambda = compute_plugin_lambda_internal(n, p, psi)
     }
     else if (selection == "bic" | selection == "aic" | selection == "ebic") {
         // Information criteria
@@ -523,6 +586,9 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
     penppmlst_ll = M.ll
     penppmlst_n_selected = M.n_selected
 
+    // Store FE contribution for d() option
+    penppmlst_fe_contrib = M.fe_contrib
+
     // Build selected variable names
     penppmlst_selected_names = ""
     for (j = 1; j <= p; j++) {
@@ -558,6 +624,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
     real matrix X_train, X_test, fe_train, fe_test
     real colvector mu_test
     real scalar dev_test
+    real colvector fe_test_contrib
 
     n = rows(y)
     p = cols(X)
@@ -599,9 +666,28 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
             M.set_hdfe_method(hdfe_method, r_compatible)
             M.solve()
 
-            // Predict on test data
+            // Predict on test data with FE contribution
+            // First compute Xb component
             mu_test = exp(X_test * M.beta)
-            mu_test = clamp_vec(mu_test, 1e-10, 1e10)
+
+            // If FEs present, recover FE contribution for test data
+            // Use R penppml approach: compute FE values via FOC iteration
+            // on pooled data with test observations included
+            if (rows(fe_ids) > 0) {
+                // For simplicity, use training FE values applied to test
+                // A more complete approach would iterate on combined data
+                // Get test FE contribution from mapped training FE values
+                fe_test_contrib = apply_fe_to_test(y_train, M.mu, M.beta,
+                                                   X_test, fe_train, fe_test)
+                mu_test = mu_test :* exp(fe_test_contrib)
+            }
+
+            if (r_compatible) {
+                mu_test = clamp_mu_r(mu_test)
+            }
+            else {
+                mu_test = clamp_vec(mu_test, 1e-10, 1e10)
+            }
 
             // Compute test deviance
             dev_test = compute_deviance(y_test, mu_test)
@@ -693,24 +779,29 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
 
 // =============================================================================
 // PLUGIN LASSO PENALTY WEIGHTS
+// Following R penppml's penhdfeppml_cluster_int.R approach:
+// 1. Use FE-demeaned X for score computation
+// 2. Use cluster_matrix for cluster-robust variance when cluster() specified
 // =============================================================================
 
 real colvector compute_plugin_weights(real colvector y, real matrix X,
                                       real matrix fe_ids, real colvector w,
-                                      string scalar cluster,
+                                      string scalar cluster_var,
                                       string scalar hdfe_method)
 {
-    real scalar n, p, j
+    real scalar n, p, j, n_clusters
     real colvector psi
-    real colvector residuals, mu
+    real colvector residuals, mu, scores
     class PenPPML scalar M
-    real colvector score_j
+    real matrix X_resid, score_matrix, cluster_var_mat
+    real colvector cluster_ids
     real scalar var_j
+    real colvector irls_w
 
     n = rows(y)
     p = cols(X)
 
-    // Fit initial unpenalized model to get residuals
+    // Fit initial unpenalized model to get residuals and mu
     M = PenPPML()
     M.set_data(y, X, J(n, 0, .), w)
     if (rows(fe_ids) > 0) {
@@ -724,23 +815,58 @@ real colvector compute_plugin_weights(real colvector y, real matrix X,
     mu = M.mu
     residuals = y - mu
 
-    // Compute penalty loadings based on score variance
-    psi = J(p, 1, 1)
-    for (j = 1; j <= p; j++) {
-        score_j = X[., j] :* residuals
-        var_j = variance(score_j)
-        psi[j] = sqrt(var_j)
+    // Compute FE-demeaned X (x_resid) for proper score variance
+    // This is critical for correct plugin weights
+    irls_w = w :* mu
+    X_resid = X
+    if (rows(fe_ids) > 0 && M.n_fe > 0) {
+        for (j = 1; j <= p; j++) {
+            X_resid[., j] = M.partial_out_fe(X[., j], irls_w)
+        }
     }
 
-    // Normalize
-    psi = psi / max(psi)
-    psi = max((psi, J(p, 1, 0.01)))  // Minimum weight
+    // Compute scores: score = (y - mu) for each observation
+    // Following R penppml: phi = sqrt(diag(cluster_matrix(mu * residuals, cluster, x_resid)) / n)
+    // But note: mu * residuals = mu * (y - mu) which is the score contribution
+
+    // Compute penalty loadings based on score variance
+    psi = J(p, 1, 1)
+
+    if (cluster_var != "") {
+        // Cluster-robust variance using cluster_matrix
+        cluster_ids = st_data(., cluster_var)
+        cluster_ids = compress_fe_col(cluster_ids, n_clusters)
+
+        // Score matrix: each column is score for that variable
+        // score_j = x_resid_j * (y - mu)
+        score_matrix = X_resid :* residuals
+
+        // Compute cluster-robust variance for each variable
+        cluster_var_mat = cluster_matrix(residuals, cluster_ids, X_resid)
+
+        for (j = 1; j <= p; j++) {
+            // Diagonal element gives variance of score_j
+            psi[j] = sqrt(cluster_var_mat[j, j] / n)
+        }
+    }
+    else {
+        // Standard (non-clustered) variance using FE-demeaned X
+        for (j = 1; j <= p; j++) {
+            psi[j] = sqrt(variance(X_resid[., j] :* residuals))
+        }
+    }
+
+    // Normalize and apply minimum weight
+    psi = psi / max((psi, 1e-10))
+    for (j = 1; j <= p; j++) {
+        if (psi[j] < 0.01) psi[j] = 0.01
+    }
 
     return(psi)
 }
 
-real scalar compute_plugin_lambda(real scalar n, real scalar p,
-                                  real colvector psi)
+real scalar compute_plugin_lambda_internal(real scalar n, real scalar p,
+                                           real colvector psi)
 {
     real scalar c, gamma, lambda
 
