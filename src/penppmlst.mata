@@ -27,8 +27,11 @@ class PenPPML {
     // ===== FIXED EFFECTS =====
     string rowvector    fe_vars         // FE variable names
     real scalar         n_fe            // Number of FE sets
-    real matrix         fe_ids          // FE group identifiers
-    real colvector      fe_contrib      // FE contribution to linear predictor
+    real matrix         fe_ids          // FE group identifiers (compressed to 1..G)
+    real matrix         fe_ids_orig     // Original FE identifiers (before compression)
+    real rowvector      fe_n_groups     // Number of groups per FE dimension
+    real colvector      fe_contrib      // FE contribution to linear predictor (log scale)
+    real matrix         fe_values       // FE values per dimension (multiplicative)
 
     // ===== ALGORITHM PARAMETERS =====
     real scalar         tol             // Outer IRLS convergence tolerance
@@ -217,8 +220,13 @@ void PenPPML::set_data(real colvector y_in, real matrix X_in,
 
 void PenPPML::set_fe(real matrix fe_ids_in, | string rowvector fe_names_in)
 {
-    fe_ids = fe_ids_in
-    n_fe = cols(fe_ids)
+    // Store original IDs for reference
+    fe_ids_orig = fe_ids_in
+    n_fe = cols(fe_ids_in)
+
+    // Compress FE IDs to contiguous 1..G for each dimension
+    // This is critical for safe array indexing in partial_out_fe_mata()
+    compress_fe_ids(fe_ids_in, fe_ids, fe_n_groups)
 
     if (args() >= 2) {
         fe_vars = fe_names_in
@@ -302,7 +310,7 @@ real colvector PenPPML::partial_out_fe_mata(real colvector v, real colvector wts
 
         // Demean within each FE set
         for (k = 1; k <= n_fe; k++) {
-            n_groups = max(fe_ids[., k])
+            n_groups = fe_n_groups[k]
             group_sums = J(n_groups, 1, 0)
             group_weights = J(n_groups, 1, 0)
 
