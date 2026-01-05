@@ -75,7 +75,6 @@ void PenPPML_CV::new()
     nlambda = 100
     tol = 1e-8
     maxiter = 100
-    real colvector fe_test_contrib
     standardize = 1
 }
 
@@ -196,6 +195,7 @@ void PenPPML_CV::run()
     class PenPPML scalar M
     real colvector mu_test, eta_test
     real scalar score
+    real colvector fe_test_contrib
 
     // Create folds if not already set
     if (rows(fold_id) == 0) {
