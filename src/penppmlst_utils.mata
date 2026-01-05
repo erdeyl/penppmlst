@@ -643,6 +643,26 @@ real colvector recover_fe_values(real colvector y, real colvector mu,
 // and apply them to test observations that share FE groups
 // ============================================================================
 
+// Binary search for a value in a sorted real vector.
+// Returns index in [1..rows(v)] if found, else 0.
+real scalar bsearch_sorted_real(real colvector v, real scalar key)
+{
+    real scalar lo, hi, mid
+
+    if (key == .) return(0)
+    lo = 1
+    hi = rows(v)
+
+    while (lo <= hi) {
+        mid = floor((lo + hi) / 2)
+        if (v[mid] == key) return(mid)
+        if (v[mid] < key) lo = mid + 1
+        else hi = mid - 1
+    }
+
+    return(0)
+}
+
 real colvector apply_fe_to_test(real colvector y_train, real colvector mu_train,
                                 real colvector beta, real matrix X_test,
                                 real matrix fe_train, real matrix fe_test)
@@ -654,6 +674,11 @@ real colvector apply_fe_to_test(real colvector y_train, real colvector mu_train,
     real colvector fe_values_k, y_sums, mu_sums, fe_test_k
     real matrix fe_test_compressed
     real scalar fe_val
+    real colvector fe_train_k, fe_train_k_sorted
+    real colvector fe_group_sorted
+    real colvector fe_orig_by_group
+    real colvector ord
+    real scalar grp
 
     n_test = rows(X_test)
     n_train = rows(y_train)
@@ -664,8 +689,10 @@ real colvector apply_fe_to_test(real colvector y_train, real colvector mu_train,
 
     // Process each FE dimension
     for (k = 1; k <= n_fe; k++) {
+        fe_train_k = fe_train[., k]
+
         // Compress training FE IDs
-        fe_train_compressed = compress_fe_col(fe_train[., k], n_groups)
+        fe_train_compressed = compress_fe_col(fe_train_k, n_groups)
 
         // Compute FE values from training data: FE_g = sum_g(y) / sum_g(mu)
         y_sums = J(n_groups, 1, 0)
@@ -681,20 +708,28 @@ real colvector apply_fe_to_test(real colvector y_train, real colvector mu_train,
         fe_values_k = y_sums :/ (mu_sums :+ (mu_sums :== 0))
         fe_values_k = fe_values_k :* (mu_sums :> 0) + (mu_sums :== 0)
 
+        // Build a fast lookup for test IDs by:
+        // 1) sorting training IDs,
+        // 2) recording one representative original ID per compressed group,
+        // 3) binary searching that sorted representative vector.
+        ord = order(fe_train_k, 1)
+        fe_train_k_sorted = fe_train_k[ord]
+        fe_group_sorted = fe_train_compressed[ord]
+
+        fe_orig_by_group = J(n_groups, 1, .)
+        for (i = 1; i <= n_train; i++) {
+            g = fe_group_sorted[i]
+            if (fe_orig_by_group[g] == .) fe_orig_by_group[g] = fe_train_k_sorted[i]
+        }
+
         // Map test FE IDs to training FE groups
-        // Build lookup from original ID to compressed ID and FE value
         fe_test_k = fe_test[., k]
 
         for (i = 1; i <= n_test; i++) {
-            // Find matching training group for this test observation
+            // Find matching group for this test observation
             fe_val = 1  // Default: no FE adjustment
-            for (g = 1; g <= n_train; g++) {
-                if (fe_train[g, k] == fe_test_k[i]) {
-                    // Found match - use the FE value for this group
-                    fe_val = fe_values_k[fe_train_compressed[g]]
-                    break
-                }
-            }
+            grp = bsearch_sorted_real(fe_orig_by_group, fe_test_k[i])
+            if (grp > 0) fe_val = fe_values_k[grp]
             fe_contrib_test[i] = fe_contrib_test[i] + ln(max((fe_val, 1e-10)))
         }
     }
