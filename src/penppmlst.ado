@@ -57,6 +57,7 @@ program define penppmlst, eclass sortpreserve
         NLambda(integer 100)                    /// Number of lambda values for path
         LMINratio(real 0.01)                    /// Ratio of lambda_min to lambda_max
         CLuster(varname)                        /// Cluster variable for plugin
+        OFFset(varname)                         /// Offset variable (log scale)
         POST                                    /// Post-lasso estimation
         noSTANDardize                           /// Don't standardize regressors
         TOLerance(real 1e-8)                    /// Convergence tolerance
@@ -77,7 +78,7 @@ program define penppmlst, eclass sortpreserve
 
     // Mark sample
     marksample touse
-    markout `touse' `absorb' `cluster'
+    markout `touse' `absorb' `cluster' `offset'
 
     // Parse varlist
     gettoken depvar indepvars : varlist
@@ -311,7 +312,7 @@ program define penppmlst, eclass sortpreserve
 
     // Run Mata estimation
     mata: penppmlst_estimate("`depvar'", "`indepvars_exp'", "`fe_list'", ///
-                           "`wvar'", "`penalty'", `lambda', `alpha', ///
+                           "`wvar'", "`offset'", "`penalty'", `lambda', `alpha', ///
                            "`selection'", `nfolds', `nlambda', `lminratio', ///
                            "`cluster'", `do_post', `do_standardize', ///
                            `tolerance', `maxiter', `do_verbose', ///
@@ -400,6 +401,9 @@ program define penppmlst, eclass sortpreserve
     if "`cluster'" != "" {
         ereturn local clustvar "`cluster'"
     }
+    if "`offset'" != "" {
+        ereturn local offset "`offset'"
+    }
     ereturn local predict "penppmlst_p"
     ereturn local title "Penalized PPML"
     ereturn local vce "robust"
@@ -465,7 +469,8 @@ real colvector penppmlst_fe_contrib
 
 void penppmlst_estimate(string scalar depvar, string scalar indepvars,
                       string scalar fe_vars, string scalar wvar,
-                      string scalar penalty, real scalar lambda,
+                      string scalar offset_var, string scalar penalty,
+                      real scalar lambda,
                       real scalar alpha, string scalar selection,
                       real scalar nfolds, real scalar nlambda,
                       real scalar lminratio, string scalar cluster,
@@ -475,7 +480,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
                       real scalar r_compatible)
 {
     class PenPPML scalar M
-    real colvector y, w
+    real colvector y, w, offset
     real matrix X
     real matrix fe_ids
     real scalar n, p, k, j
@@ -490,6 +495,13 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
     y = st_data(., depvar)
     X = st_data(., tokens(indepvars))
     w = st_data(., wvar)
+
+    if (offset_var != "") {
+        offset = st_data(., offset_var)
+    }
+    else {
+        offset = J(rows(y), 1, 0)
+    }
 
     n = rows(y)
     p = cols(X)
@@ -519,7 +531,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
             printf("Performing %g-fold cross-validation...\n", nfolds)
         }
         lambdas = generate_lambda_sequence(X, y, w, psi, alpha, nlambda, lminratio)
-        best_lambda = cv_select_lambda(y, X, fe_ids, w, lambdas, alpha,
+        best_lambda = cv_select_lambda(y, X, fe_ids, w, offset, lambdas, alpha,
                                        penalty, psi, nfolds, tol, maxiter,
                                        hdfe_method, r_compatible)
         lambda = best_lambda
@@ -529,7 +541,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
         if (verbose) {
             printf("Computing plugin penalty weights...\n")
         }
-        psi = compute_plugin_weights(y, X, fe_ids, w, cluster, hdfe_method)
+        psi = compute_plugin_weights(y, X, fe_ids, w, offset, cluster, hdfe_method)
         lambda = compute_plugin_lambda_internal(n, p, psi)
     }
     else if (selection == "bic" | selection == "aic" | selection == "ebic") {
@@ -538,7 +550,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
             printf("Selecting lambda via %s...\n", strupper(selection))
         }
         lambdas = generate_lambda_sequence(X, y, w, psi, alpha, nlambda, lminratio)
-        best_lambda = ic_select_lambda(y, X, fe_ids, w, lambdas, alpha,
+        best_lambda = ic_select_lambda(y, X, fe_ids, w, offset, lambdas, alpha,
                                        penalty, psi, selection, tol, maxiter,
                                        hdfe_method, r_compatible)
         lambda = best_lambda
@@ -547,7 +559,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
     // ===== MAIN ESTIMATION =====
 
     // Set up model
-    M.set_data(y, X, J(n, 0, .), w)
+    M.set_data(y, X, J(n, 0, .), w, offset)
     if (rows(fe_ids) > 0) {
         M.set_fe(fe_ids, fe_names)
     }
@@ -607,6 +619,7 @@ void penppmlst_estimate(string scalar depvar, string scalar indepvars,
 
 real scalar cv_select_lambda(real colvector y, real matrix X,
                              real matrix fe_ids, real colvector w,
+                             real colvector offset,
                              real colvector lambdas, real scalar alpha,
                              string scalar penalty, real colvector psi,
                              real scalar nfolds, real scalar tol,
@@ -625,6 +638,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
     real colvector mu_test
     real scalar dev_test
     real colvector fe_test_contrib
+    real colvector offset_train, offset_test
 
     n = rows(y)
     p = cols(X)
@@ -647,6 +661,8 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
         X_test = X[test_idx, .]
         w_train = w[train_idx]
         w_test = w[test_idx]
+        offset_train = offset[train_idx]
+        offset_test = offset[test_idx]
 
         if (rows(fe_ids) > 0) {
             fe_train = fe_ids[train_idx, .]
@@ -657,7 +673,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
         for (lam_idx = 1; lam_idx <= nlam; lam_idx++) {
             // Fit model on training data
             M = PenPPML()
-            M.set_data(y_train, X_train, J(rows(y_train), 0, .), w_train)
+            M.set_data(y_train, X_train, J(rows(y_train), 0, .), w_train, offset_train)
             if (rows(fe_ids) > 0) {
                 M.set_fe(fe_train)
             }
@@ -668,7 +684,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
 
             // Predict on test data with FE contribution
             // First compute Xb component
-            mu_test = exp(X_test * M.beta)
+            mu_test = exp(X_test * M.beta + offset_test)
 
             // If FEs present, recover FE contribution for test data
             // Use R penppml approach: compute FE values via FOC iteration
@@ -717,6 +733,7 @@ real scalar cv_select_lambda(real colvector y, real matrix X,
 
 real scalar ic_select_lambda(real colvector y, real matrix X,
                              real matrix fe_ids, real colvector w,
+                             real colvector offset,
                              real colvector lambdas, real scalar alpha,
                              string scalar penalty, real colvector psi,
                              string scalar criterion, real scalar tol,
@@ -738,7 +755,7 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
     for (lam_idx = 1; lam_idx <= nlam; lam_idx++) {
         // Fit model
         M = PenPPML()
-        M.set_data(y, X, J(n, 0, .), w)
+        M.set_data(y, X, J(n, 0, .), w, offset)
         if (rows(fe_ids) > 0) {
             M.set_fe(fe_ids)
         }
@@ -786,6 +803,7 @@ real scalar ic_select_lambda(real colvector y, real matrix X,
 
 real colvector compute_plugin_weights(real colvector y, real matrix X,
                                       real matrix fe_ids, real colvector w,
+                                      real colvector offset,
                                       string scalar cluster_var,
                                       string scalar hdfe_method)
 {
@@ -803,7 +821,7 @@ real colvector compute_plugin_weights(real colvector y, real matrix X,
 
     // Fit initial unpenalized model to get residuals and mu
     M = PenPPML()
-    M.set_data(y, X, J(n, 0, .), w)
+    M.set_data(y, X, J(n, 0, .), w, offset)
     if (rows(fe_ids) > 0) {
         M.set_fe(fe_ids)
     }

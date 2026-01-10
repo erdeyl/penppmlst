@@ -143,8 +143,17 @@ program define penppmlst_p
         local selected_vars `e(selected)'
         di as txt "Selected variables: `selected_vars'"
         di as txt "Number selected: " as res e(n_selected) as txt " / " as res `nvars'
-        gen `typlist' `varlist' = (`xb_temp' != 0) if `touse'
-        label var `varlist' "Has non-zero predicted value"
+        gen `typlist' `varlist' = 0 if `touse'
+        if "`selected_vars'" != "" {
+            foreach var of local selected_vars {
+                qui replace `varlist' = `varlist' + (`var' != 0) if `touse'
+            }
+            qui replace `varlist' = (`varlist' > 0) if `touse'
+            label var `varlist' "Selected variable is non-zero"
+        }
+        else {
+            label var `varlist' "No selected variables"
+        }
     }
 end
 

@@ -46,6 +46,7 @@
 {synopt:{opt nl:ambda(#)}}number of lambda values for regularization path; default is 100{p_end}
 {synopt:{opt lminratio(#)}}ratio of lambda_min to lambda_max; default is 0.01{p_end}
 {synopt:{opt cl:uster(varname)}}cluster variable for plugin penalty weights{p_end}
+{synopt:{opt off:set(varname)}}offset variable (log scale) included in the linear predictor{p_end}
 
 {syntab:Estimation}
 {synopt:{opt post}}compute post-lasso estimates (unpenalized on selected variables){p_end}
@@ -200,6 +201,11 @@ Default is 1e-8.
 {opt maxiter(#)} specifies the maximum number of IRLS iterations.
 Default is 1000.
 
+{phang}
+{opt offset(varname)} specifies an offset variable (on the log scale) to include
+in the linear predictor. The offset is added to {cmd:xb} in estimation and
+postestimation unless {opt nooffset} is specified at prediction.
+
 
 {dlgtab:HDFE Method}
 
@@ -335,6 +341,7 @@ The following postestimation command is available after {cmd:penppmlst}:
 {synopt:{opt ans:combe}}Anscombe residuals{p_end}
 {synopt:{opt sco:res}}score (first derivative of log-likelihood){p_end}
 {synopt:{opt sel:ected}}indicator for selected variables{p_end}
+{synopt:{opt nooff:set}}ignore stored offset when forming xb or mu{p_end}
 {synoptline}
 
 {pstd}
