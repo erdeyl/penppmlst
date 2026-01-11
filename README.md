@@ -70,6 +70,7 @@ penppmlst depvar indepvars, absorb(absvars) [options]
 | `nfolds(#)` | Number of CV folds (default: 10) |
 | `nlambda(#)` | Number of lambda values (default: 100) |
 | `cluster(varname)` | Cluster variable for plugin weights |
+| `offset(varname)` | Offset variable (log scale) |
 
 ### Estimation Options
 
@@ -111,6 +112,7 @@ predict newvar [if] [in] , [mu xb xbd d residuals deviance pearson anscombe scor
 | `deviance` | Deviance residuals |
 | `pearson` | Pearson residuals |
 | `anscombe` | Anscombe residuals |
+| `nooffset` | Ignore stored offset when forming predictions |
 
 **Note:** Predictions requiring FE (mu, xbd, d, residuals) need the `d()` option in the estimation command.
 
@@ -146,6 +148,10 @@ predict residuals, residuals
 * R-compatible mode for cross-platform reproducibility
 penppmlst trade provisions, absorb(i.pair i.year) ///
     selection(plugin) r_compatible d(fe_contrib)
+
+* With offset (e.g., exposure variable)
+penppmlst deaths age_group smoking, absorb(i.region i.year) ///
+    offset(log_population) selection(cv) post
 ```
 
 ## Stored Results
@@ -171,6 +177,7 @@ penppmlst trade provisions, absorb(i.pair i.year) ///
 | `e(hdfe)` | HDFE method used |
 | `e(r_compatible)` | "yes" if R-compatible mode |
 | `e(d)` | FE contribution variable name |
+| `e(offset)` | Offset variable name |
 
 ### Matrices
 

@@ -19,6 +19,7 @@ d - Cross-validation for lambda selection with FE-aware scoring
 d - BIC/AIC/EBIC information criteria
 d - R-compatible mode for exact replication of R penppml results
 d - Choice of HDFE backends: pure Mata or ppmlhdfe
+d - Offset variable support for exposure adjustment
 d - Comprehensive predict with fitted values, residuals, and FE contributions
 d
 d Requires: Stata 17+, ftools (reghdfe and ppmlhdfe optional for hdfe(ppmlhdfe))

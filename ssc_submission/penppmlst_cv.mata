@@ -527,8 +527,10 @@ void PenPPML_RollingCV::run()
 
     // Find minimum
     lambda_min = lambdas[1]
+    min_score = mean_score[1]
     for (lam_idx = 2; lam_idx <= nlambda; lam_idx++) {
-        if (mean_score[lam_idx] < mean_score[1]) {
+        if (mean_score[lam_idx] < min_score) {
+            min_score = mean_score[lam_idx]
             lambda_min = lambdas[lam_idx]
         }
     }
